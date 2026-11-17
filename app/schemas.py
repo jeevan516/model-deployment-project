@@ -16,4 +16,6 @@ class Trip(BaseModel):
 
 class Prediction(BaseModel):
     duration_minutes: float = Field(description="Predicted trip duration in minutes")
+    low_minutes: float | None = Field(default=None, description="10th percentile: 9 in 10 trips take longer")
+    high_minutes: float | None = Field(default=None, description="90th percentile: 9 in 10 trips are faster")
     model_run_id: str | None = Field(default=None, description="MLflow run that produced the model")
