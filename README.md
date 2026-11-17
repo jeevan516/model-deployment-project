@@ -126,6 +126,12 @@ uv run python -m src.train                         # RandomForest baseline (the 
 uv run python -m src.compare                       # 6 approaches on 500k rows, scored on January + February 2025
 uv run python -m src.compare --models hgb --train-size 0 --save hgb   # the served model (all 2.67M rows)
 uv run python -m src.long_trips                    # long-trip experiment: route features, live traffic, weather
+uv run python -m src.time_validation               # train 1-24 Jan, validate 25-31 Jan and February
+uv run python -m src.multi_month [--live-traffic]  # Nov 2024 - Jan 2025 training, tested on February
+uv run python -m src.drift                         # PSI drift check per month against January
+uv run python -m src.intervals                     # 10th/90th percentile models: the API returns a range
+uv run python -m src.registry                      # register artifacts/model.skops as taxi-duration@champion
+uv run python -m src.monitor                       # February day by day; reports/monitoring_2025-02.csv
 uv run python -m src.tune --trials 20              # stretch: Optuna for the RandomForest
 uv run python -m src.tune --model hgb --trials 20  # Optuna for HistGradientBoosting
 uv run python -m pytest                            # 15 tests
@@ -275,3 +281,14 @@ missing time) → HTTP 422. The container uses about 240 MB of memory.
 The January gain is inflated (validation trips share hours and weather with training trips); February,
 a month the model never saw, shows the real gain of 0.07. The API still serves the base model, because
 live traffic needs a real-time feed.
+
+### "More time" answers, implemented
+
+| Answer | Result |
+|---|---|
+| Validate by time (train 1-24 Jan) | RMSE 25-31 Jan / Feb: served 3.74 / 3.93; + route, live traffic, weather 3.68 / 3.87; weather alone 3.94 / 4.25 (overfits) |
+| More months | February RMSE: Jan only 3.88, Nov-Jan 4.26; with live traffic 3.84 and 3.92 |
+| Drift check | max PSI 0.06: all months stable, yet Nov/Dec trips are slower |
+| Prediction range | 80% coverage in January, 79% in February, 6.9 min wide; 52% for 45-60 min trips |
+| Registry | `MODEL_URI=models:/taxi-duration@champion uv run uvicorn app.main:app` |
+| Monitoring | 2 of 28 February days above the alert line: 8 Feb (snow), 14 Feb (Valentine's Day) |

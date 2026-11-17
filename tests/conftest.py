@@ -37,5 +37,7 @@ def tiny_model_path(tmp_path, monkeypatch):
     monkeypatch.setenv("MODEL_PATH", str(path))
     from app import main
     main.get_model.cache_clear()
+    main.get_range_models.cache_clear()
     yield path
     main.get_model.cache_clear()
+    main.get_range_models.cache_clear()

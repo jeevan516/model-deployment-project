@@ -19,10 +19,23 @@ from src.compare import make_model
 from src.train import load_split
 
 
+def prepare_ranges(path: Path) -> None:
+    """With TRAIN_RANGES=1, also train the 10th/90th percentile models so /predict returns a range."""
+    from src.intervals import QUANTILES, make_quantile_model, quantile_path
+    if os.getenv("TRAIN_RANGES", "0") != "1" or all(quantile_path(n, path).exists() for n in QUANTILES):
+        return
+    print("training the 10th/90th percentile models for prediction ranges (2-4 minutes)")
+    X_train, _, y_train, _, _ = load_split(int(os.getenv("TRAIN_SIZE", "0")) or None)
+    for name, q in QUANTILES.items():
+        model_io.save(make_quantile_model(q).fit(X_train, y_train), quantile_path(name, path), metadata={"quantile": q})
+    print("saved range models")
+
+
 def main() -> None:
     path = Path(os.getenv("MODEL_PATH", str(model_io.DEFAULT_MODEL_PATH)))
     if path.exists():
         print(f"model already at {path}")
+        prepare_ranges(path)
         return
     print("no model yet: downloading January 2025 and training HistGradientBoosting on all rows (1-2 minutes)")
     X_train, X_val, y_train, y_val, _ = load_split(int(os.getenv("TRAIN_SIZE", "0")) or None)
@@ -32,6 +45,7 @@ def main() -> None:
     model_io.save(model, path, metadata={"run_id": None, "run_name": "hgb-container", "train_rows": len(X_train), "rmse": rmse,
                                          "mae": mae, "features": features.FEATURES})
     print(f"saved {path}: validation RMSE {rmse:.3f}, MAE {mae:.3f}")
+    prepare_ranges(path)
 
 
 if __name__ == "__main__":
