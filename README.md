@@ -125,6 +125,7 @@ uv run python -m src.checks                        # data checks: raw vs cleaned
 uv run python -m src.train                         # RandomForest baseline (the assignment) -> MLflow
 uv run python -m src.compare                       # 6 approaches on 500k rows, scored on January + February 2025
 uv run python -m src.compare --models hgb --train-size 0 --save hgb   # the served model (all 2.67M rows)
+uv run python -m src.long_trips                    # long-trip experiment: route features, live traffic, weather
 uv run python -m src.tune --trials 20              # stretch: Optuna for the RandomForest
 uv run python -m src.tune --model hgb --trials 20  # Optuna for HistGradientBoosting
 uv run python -m pytest                            # 15 tests
@@ -174,6 +175,7 @@ paste [`portainer-windows.yaml`](portainer-windows.yaml) into a new stack.
 | `src/features.py` | The 5 features used by training and the API: pickup zone, dropoff zone, distance, pickup hour, weekday |
 | `src/train.py` | The assignment's `RandomForestRegressor`, logged to MLflow (params, RMSE, MAE, model) |
 | `src/compare.py` | Six approaches (route speed, Ridge, RandomForest, HistGradientBoosting, XGBoost, LightGBM); January and February 2025 |
+| `src/long_trips.py`, `src/route_features.py`, `src/live_context.py` | Long-trip experiment: route speed by hour, airport flags, live traffic, NYC weather (offline) |
 | `src/tune.py` | Optuna (20 trials, nested MLflow runs) for the RandomForest or HistGradientBoosting |
 | `src/prepare_model.py` | Trains the served model if none exists (used by the Docker entrypoint) |
 | `src/model_io.py` | Saves and loads models with skops; only sklearn's two tree node types are trusted |
@@ -259,3 +261,17 @@ missing time) → HTTP 422. The container uses about 240 MB of memory.
    - Train on several months and validate on the next one, with a monthly drift check.
    - Load the model from the MLflow Model Registry by alias instead of a file (CI already runs
      the tests and checks the Docker image on every push).
+
+### Long-trip experiment
+
+`uv run python -m src.long_trips`, all 2,671,267 training rows:
+
+| Model | RMSE January | RMSE February |
+|---|---|---|
+| Served HistGradientBoosting | 3.70 | 3.88 |
+| + route speed by hour, airport flags | 3.66 | 3.84 |
+| + live traffic and weather | 3.52 | 3.81 |
+
+The January gain is inflated (validation trips share hours and weather with training trips); February,
+a month the model never saw, shows the real gain of 0.07. The API still serves the base model, because
+live traffic needs a real-time feed.
