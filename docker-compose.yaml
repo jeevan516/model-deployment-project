@@ -1,0 +1,22 @@
+# The prediction API in Docker (macOS and Windows). Train first so artifacts/model.skops exists:
+#   uv run python -m src.train
+#   docker compose up -d --build
+#   curl http://127.0.0.1:8004/health
+# Host port 8004 by default (8000 is often used by other projects); change with API_HOST_PORT.
+name: model-deployment-project
+
+services:
+  api:
+    build: .
+    image: model-deployment-project-api:latest
+    ports:
+      - "${API_HOST_PORT:-8004}:8000"
+    volumes:
+      - ./artifacts:/app/artifacts:ro      # model.skops + model.json from training
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
+    restart: unless-stopped
