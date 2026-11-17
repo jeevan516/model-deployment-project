@@ -211,5 +211,5 @@ distance 0, missing time) → HTTP 422.
    - Add features for the remaining error: route-level average speed by hour, airport flags,
      weather and traffic for the day.
    - Train on several months and validate on the next one, with a monthly drift check.
-   - Load the model from the MLflow Model Registry by alias, and add CI that runs the tests and
-     builds the image.
+   - Load the model from the MLflow Model Registry by alias instead of a file (CI already runs
+     the tests and checks the Docker image on every push).

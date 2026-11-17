@@ -51,6 +51,7 @@ Real runs on 17 Nov 2026 (Mac). Validation: 667,817 January trips; out-of-time: 
 | Container | healthy; about 220 MB memory; first start on an empty volume trains the model (RMSE 3.784) and serves it |
 | Invalid input | zone 999, distance 0, missing time → HTTP 422 |
 | Tests | **11 / 11 pass** |
+| CI (GitHub Actions, clean Ubuntu) | **passing**: tests, Docker build, fresh container trains its model and answers `/predict` |
 | MLflow | MLflow 3.17 rejects the README's `./mlruns` file store; using `sqlite:///mlflow.db` |
 
 **Answers:** final RMSE **3.78 minutes** (served HistGradientBoosting; 3.96 on February). The
@@ -60,8 +61,9 @@ weather features; multi-month training with a drift check; serve from the MLflow
 ## Future engineering
 - Features for the remaining error: route-level average speed by hour, airport flags, weather.
 - Train on several months and validate on the next; monthly drift check on the API's inputs.
-- Load the model from the MLflow Model Registry by alias; CI for tests and the Docker image.
+- Load the model from the MLflow Model Registry by alias.
 
 ## Update log
 - 17 Nov 2026: project built from the template: data, features, training with MLflow, Optuna tuning, FastAPI, tests, Docker files, notebook, README results; deck added.
 - 17 Nov 2026: more approaches (Ridge, HistGradientBoosting) with a February 2025 out-of-time check; HistGradientBoosting tuned with Optuna; API now serves HistGradientBoosting (RMSE 3.78, 8.6 MB); Docker run checked, container trains its model on first start; Portainer files for Mac and Windows; 11 tests; deck updated.
+- 17 Nov 2026: GitHub Actions CI added and passing (tests, Docker build, first-start train-and-serve check).
