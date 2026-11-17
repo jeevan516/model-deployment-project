@@ -22,7 +22,7 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_absolute_error, root_mean_squared_error
 from sklearn.model_selection import train_test_split
 
-from src import data, features, model_io
+from src import checks, data, features, model_io
 
 os.environ.setdefault("MLFLOW_DISABLE_AGENT_HINT", "1")
 TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", f"sqlite:///{data.PROJECT_ROOT / 'mlflow.db'}")
@@ -35,6 +35,7 @@ BASELINE_PARAMS = {"n_estimators": 100, "max_depth": 20, "min_samples_leaf": 10}
 def load_split(train_size: int | None, random_state: int = RANDOM_STATE):
     """Clean data, 80/20 split, then optionally subsample the training part for speed."""
     df = data.clean(data.load())
+    checks.assert_clean(df)  # stop here if the cleaned data breaks a rule (see src/checks.py)
     X, y = features.build_features(df), df[data.TARGET]
     X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=random_state)
     if train_size and train_size < len(X_train):

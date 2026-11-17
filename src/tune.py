@@ -7,6 +7,9 @@ Each trial trains on a 200,000-row sample and scores on a fixed 200,000-row slic
 validation set (logged as nested MLflow runs). The best parameters are then retrained on the
 same 500,000 training rows as the baseline and scored on the full validation set, so the two
 final numbers are directly comparable. The tuned model is only saved for the API with --save.
+
+Studies are stored in optuna.db, so you can explore them in Optuna's own dashboard:
+    uv run optuna-dashboard sqlite:///optuna.db --port 8085      # http://127.0.0.1:8085
 """
 
 from __future__ import annotations
@@ -83,9 +86,11 @@ def fit_hgb_and_log(params: dict, split):
 @click.command()
 @click.option("--model", "model_name", type=click.Choice(["rf", "hgb"]), default="rf", show_default=True)
 @click.option("--trials", default=20, show_default=True)
+@click.option("--storage", default="sqlite:///optuna.db", show_default=True,
+              help="Where Optuna keeps the study (open it with optuna-dashboard).")
 @click.option("--save/--no-save", default=False, show_default=True,
               help="Save the tuned model to artifacts/model.skops for the API.")
-def main(model_name: str, trials: int, save: bool) -> None:
+def main(model_name: str, trials: int, storage: str, save: bool) -> None:
     split = load_split(500_000)
     X_train, X_val, y_train, y_val, _ = split
     X_tr, y_tr = X_train.sample(n=200_000, random_state=RANDOM_STATE), None
@@ -95,8 +100,14 @@ def main(model_name: str, trials: int, save: bool) -> None:
     setup_mlflow()
     optuna.logging.set_verbosity(optuna.logging.WARNING)
     with mlflow.start_run(run_name="optuna-search" if model_name == "rf" else f"optuna-search-{model_name}"):
-        study = optuna.create_study(direction="minimize",
+        study_name = f"{model_name}-search"
+        try:  # a re-run replaces the old study instead of adding to it
+            optuna.delete_study(study_name=study_name, storage=storage)
+        except KeyError:
+            pass
+        study = optuna.create_study(study_name=study_name, storage=storage, direction="minimize",
                                     sampler=optuna.samplers.TPESampler(seed=RANDOM_STATE))
+        study.set_user_attr("rows", "200k train sample, 200k validation slice")
         study.optimize(objective_factory(X_tr, y_tr, X_va, y_va, model_name), n_trials=trials)
         mlflow.log_params({f"best_{k}": v for k, v in study.best_params.items()})
         mlflow.log_metric("best_search_rmse", study.best_value)

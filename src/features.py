@@ -20,6 +20,6 @@ def build_features(df: pd.DataFrame, pickup_column: str = "tpep_pickup_datetime"
             "DOLocationID": df["DOLocationID"].astype("int32"),
             "trip_distance": df["trip_distance"].astype("float64"),
             "pickup_hour": pickup.dt.hour.astype("int32"),
-            "pickup_weekday": pickup.dt.dayofweek.astype("int32"),  # Monday = 0
+            "pickup_weekday": pickup.dt.day_of_week.astype("int32"),  # Monday = 0
         }
     )[FEATURES]
