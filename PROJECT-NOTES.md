@@ -47,7 +47,7 @@ Real runs on 17 Nov 2026 (Mac). Validation: 667,817 January trips; out-of-time: 
 | Data step | Trips |
 |---|---|
 | Raw January | 3,475,226 |
-| Duration 1-60 min | 3,403,248 (drops 38,060 under 1 min, 31,867 over 60) |
+| Duration 1-60 min | 3,403,248 (drops 40,111 under 1 min: 38,060 short + 2,051 ending before pickup; 31,867 over 60) |
 | Distance > 0 | 3,339,226 (drops 90,893: the biggest problem) |
 | Distance ≤ 100, pickup in January | **3,339,084** (96.1%); all 9 rules then 0 failures |
 

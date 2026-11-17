@@ -198,7 +198,7 @@ paste [`portainer-windows.yaml`](portainer-windows.yaml) into a new stack.
 | Step | Trips | |
 |---|---|---|
 | Raw January 2025 file | 3,475,226 | 20 columns; 5 are used |
-| Keep duration 1-60 min | 3,403,248 | drops 38,060 under 1 min (incl. 2,051 with dropoff not after pickup) and 31,867 over 60 min |
+| Keep duration 1-60 min | 3,403,248 | drops 40,111 under 1 min (38,060 short trips + 2,051 with dropoff not after pickup) and 31,867 over 60 min |
 | Keep distance > 0 | 3,339,226 | drops 90,893 zero/negative distances (2.6%, the biggest problem) |
 | Keep distance ≤ 100 miles | 3,339,105 | drops 162 |
 | Keep pickups in January | **3,339,084** (96.1%) | drops 22 |
