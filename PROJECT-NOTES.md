@@ -12,50 +12,56 @@ experiments in MLflow and serve the model through a local FastAPI app.
 - **Model:** scikit-learn `RandomForestRegressor`; stretch tasks: tests and Optuna tuning.
 
 ## Approach
-1. **Explore** (`notebooks/01-explore-and-compare.ipynb`): duration ranges from −51,472 to
-   5,626 minutes in the raw file; 124 negative and 20 over 24 hours.
-2. **Clean** (`src/data.py`): keep 1-60 minutes, 0 < distance ≤ 100 miles, January pickups →
-   3,339,084 trips (96.1%).
+1. **Explore** (`notebooks/01-explore-and-compare.ipynb`): raw durations range from −51,472 to
+   5,626 minutes; 124 negative and 20 over 24 hours.
+2. **Clean** (`src/data.py`): keep 1-60 minutes, 0 < distance ≤ 100 miles, pickups in the month →
+   3,339,084 January trips (96.1%).
 3. **Features** (`src/features.py`): pickup zone, dropoff zone, distance, pickup hour, weekday;
    only what is known when a trip starts (no fare or tip, which would leak the target).
-4. **Train and track** (`src/train.py`): 80/20 split (seed 42), 500,000-row training sample,
-   full validation set; params, RMSE, MAE and the model logged to MLflow (`mlflow.db` +
-   `mlruns/`); model saved with skops to `artifacts/model.skops`.
-5. **Tune** (`src/tune.py`): Optuna, 20 trials on 200,000 rows as nested MLflow runs; best
-   parameters retrained on the same 500,000 rows and compared with the baseline.
-6. **Serve** (`app/`): FastAPI `/health`, `/predict`, `/predict_batch`; model loaded once;
-   Pydantic validation. Run with uvicorn; Dockerfile and compose file included.
-7. **Test** (`tests/`): data cleaning, features, model save/load, API.
+4. **Baseline** (`src/train.py`): the assignment's RandomForest on a 500,000-row sample of the 80%
+   split (seed 42), scored on the full 20% validation set, logged to MLflow (`mlflow.db` + `mlruns/`).
+5. **More approaches** (`src/compare.py`): Ridge with one-hot zones, RandomForest and
+   HistGradientBoosting on the same rows, scored on January and on February 2025 (out-of-time).
+6. **Tune** (`src/tune.py`): Optuna, 20 trials each for RandomForest and HistGradientBoosting.
+7. **Serve** (`app/`): FastAPI `/health`, `/predict`, `/predict_batch`; serves the
+   HistGradientBoosting model, loaded once; Pydantic validation.
+8. **Docker** (`Dockerfile`, `docker-compose.yaml`, `portainer-windows.yaml`): the container trains
+   the model on first start if none is mounted (`src/prepare_model.py`), so it runs anywhere.
+9. **Test** (`tests/`): cleaning, features, model files (both tree types), API.
 
 ## Results
-Real run on 17 Nov 2026 (Mac, uvicorn).
+Real runs on 17 Nov 2026 (Mac). Validation: 667,817 January trips; out-of-time: 3,427,258 February trips.
+
+| Model | RMSE Jan | RMSE Feb | MAE Jan | Size | Fit |
+|---|---|---|---|---|---|
+| Mean duration | 9.78 | 9.72 | | | |
+| Ridge, one-hot zones | 5.47 | 5.61 | 3.92 | 0.1 MB | 0.3 s |
+| RandomForest baseline (assignment) | 4.10 | 4.27 | 2.76 | 291 MB | 9.5 s |
+| RandomForest + Optuna | 4.03 | | 2.71 | 1,153 MB | 6.7 s |
+| **HistGradientBoosting (served)** | **3.78** | **3.96** | **2.53** | **8.6 MB** | 12 s |
+| HistGradientBoosting + Optuna | 3.77 | | 2.52 | | 19 s |
 
 | Check | Result |
 |---|---|
-| Clean data | **3,339,084** of 3,475,226 trips kept; validation set **667,817** trips |
 | Correlation with duration | trip_distance **0.80**; zones −0.12 / −0.10; hour and weekday ≈ 0 (linear) |
-| Mean-duration baseline | RMSE **9.78** min |
-| **Baseline RandomForest** (100 trees, depth 20, min leaf 10) | **RMSE 4.10**, MAE 2.76, fit 9.9 s, model **291 MB** (served) |
-| Optuna (20 trials, 200k rows) | search RMSE 4.136 best, 4.333 worst; best: 100 trees, depth 26, min leaf 3, max_features 0.6 |
-| Tuned RandomForest (same 500k rows) | RMSE **4.03**, MAE 2.71, fit 6.7 s, model **1,153 MB** |
-| Tuning worth it? | No for serving: 1.7% (≈4 s) better for a 4× larger model |
-| API `sample-request.json` (161 → 236, 2.5 mi, Wed 08:30) | **18.36 min** in 0.04 s |
-| Same trip at 03:00 / 17:30 | 11.23 / 17.13 min; JFK → Times Square 17 mi at 17:30: 49.09 min |
+| Optuna searches (200k rows) | RandomForest 4.136-4.333; HistGradientBoosting 3.866-4.015 |
+| Tuning worth it? | No: RF +1.7% for 4× the size; HGB +0.01 min for 1,000 iterations |
+| Out-of-time (February) | every model loses only 0.14-0.18 min RMSE |
+| API in Docker (`sample-request.json`, 161 → 236, 2.5 mi, Wed 08:30) | **19.63 min** in 0.02 s; 03:00 → 12.65; 17:30 → 17.61; JFK → Times Square 50.42 |
+| Container | healthy; about 220 MB memory; first start on an empty volume trains the model (RMSE 3.784) and serves it |
 | Invalid input | zone 999, distance 0, missing time → HTTP 422 |
-| Tests | **10 / 10 pass** |
-| MLflow | MLflow 3.17 rejects the README's `./mlruns` file store; switched to `sqlite:///mlflow.db` (UI checked) |
-| Docker | Dockerfile and compose written; **not run**: Docker Desktop was not installed on the Mac on 17 Nov |
+| Tests | **11 / 11 pass** |
+| MLflow | MLflow 3.17 rejects the README's `./mlruns` file store; using `sqlite:///mlflow.db` |
 
-**Answers:** final RMSE **4.10 minutes** (served baseline). With more time: route speed by hour,
-airport and weather features; gradient boosting for a smaller model; validate on February 2025;
-load from the MLflow registry by alias; CI.
+**Answers:** final RMSE **3.78 minutes** (served HistGradientBoosting; 3.96 on February). The
+assignment's RandomForest baseline reaches 4.10. With more time: route speed by hour, airport and
+weather features; multi-month training with a drift check; serve from the MLflow registry; CI.
 
 ## Future engineering
 - Features for the remaining error: route-level average speed by hour, airport flags, weather.
-- Gradient boosting (LightGBM / HistGradientBoosting) for similar accuracy with a far smaller model.
-- Out-of-time validation on February 2025.
+- Train on several months and validate on the next; monthly drift check on the API's inputs.
 - Load the model from the MLflow Model Registry by alias; CI for tests and the Docker image.
-- Run and check the Docker path once Docker Desktop is back.
 
 ## Update log
 - 17 Nov 2026: project built from the template: data, features, training with MLflow, Optuna tuning, FastAPI, tests, Docker files, notebook, README results; deck added.
+- 17 Nov 2026: more approaches (Ridge, HistGradientBoosting) with a February 2025 out-of-time check; HistGradientBoosting tuned with Optuna; API now serves HistGradientBoosting (RMSE 3.78, 8.6 MB); Docker run checked, container trains its model on first start; Portainer files for Mac and Windows; 11 tests; deck updated.

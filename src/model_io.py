@@ -9,8 +9,12 @@ import skops.io as sio
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_MODEL_PATH = PROJECT_ROOT / "artifacts" / "model.skops"
-# Random forests store their nodes in this type; we trust it because we train the model ourselves.
-TRUSTED_TYPES = ["sklearn.tree._tree.Tree"]
+# Tree models store their nodes in these types (random forest, HistGradientBoosting).
+# We trust them because we train the models ourselves; nothing else is accepted.
+TRUSTED_TYPES = [
+    "sklearn.tree._tree.Tree",
+    "sklearn.ensemble._hist_gradient_boosting.predictor.TreePredictor",
+]
 
 
 def save(model, path: str | Path = DEFAULT_MODEL_PATH, metadata: dict | None = None) -> Path:

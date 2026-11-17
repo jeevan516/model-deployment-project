@@ -7,9 +7,11 @@ COPY --from=uv /uv /uvx /bin/
 COPY pyproject.toml uv.lock ./
 RUN uv sync --locked --no-dev --no-install-project --no-cache
 
-# Code only. The model (about 300 MB) is mounted at runtime from ./artifacts.
+# Code only. The model comes from ./artifacts (mounted) or a volume; if it is missing,
+# the entrypoint downloads January 2025 and trains it once (about a minute).
 COPY src ./src
 COPY app ./app
+COPY docker-entrypoint.sh ./
 ENV MODEL_PATH=/app/artifacts/model.skops
 EXPOSE 8000
-CMD ["uv", "run", "--no-sync", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["./docker-entrypoint.sh"]

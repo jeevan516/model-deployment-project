@@ -1,0 +1,31 @@
+# model-deployment-project for Portainer on WINDOWS (Docker Desktop).
+# Stack name: model-deployment-project      API: http://localhost:8004/docs
+#
+# 1. Build the image once on Windows (Portainer cannot build):
+#      cd C:\Users\<you>\Projects\model-deployment-project
+#      docker compose build
+# 2. Portainer -> Stacks -> Add stack -> Web editor -> paste this file -> Deploy.
+#
+# No folders to mount: on first start the container downloads January 2025 and trains the
+# HistGradientBoosting model into the `model-data` volume (about a minute), then serves it.
+# Watch it in Portainer -> Containers -> model-deployment-project-api-1 -> Logs.
+name: model-deployment-project
+
+services:
+  api:
+    image: model-deployment-project-api:latest
+    pull_policy: never          # the image is built locally in step 1, not pulled
+    ports:
+      - "8004:8000"
+    volumes:
+      - model-data:/app/artifacts
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 15s
+      timeout: 5s
+      start_period: 180s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  model-data:
