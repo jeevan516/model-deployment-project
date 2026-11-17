@@ -170,3 +170,4 @@ cython_debug/
 # Downloaded taxi data (re-download with: uv run python -m src.data)
 data/
 mlflow.db
+optuna.db

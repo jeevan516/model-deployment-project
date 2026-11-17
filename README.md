@@ -121,20 +121,29 @@ If you create a notebook to explore the data, select the Python environment crea
 
 ```bash
 uv run python -m src.data                          # download January 2025 (about 60 MB) into data/
+uv run python -m src.checks                        # data checks: raw vs cleaned January
 uv run python -m src.train                         # RandomForest baseline (the assignment) -> MLflow
-uv run python -m src.compare --save hgb            # linear vs RandomForest vs HistGradientBoosting, Jan + Feb 2025;
-                                                   # saves the HistGradientBoosting model the API serves
+uv run python -m src.compare                       # 6 approaches on 500k rows, scored on January + February 2025
+uv run python -m src.compare --models hgb --train-size 0 --save hgb   # the served model (all 2.67M rows)
 uv run python -m src.tune --trials 20              # stretch: Optuna for the RandomForest
 uv run python -m src.tune --model hgb --trials 20  # Optuna for HistGradientBoosting
-uv run python -m pytest                            # 11 tests
+uv run python -m pytest                            # 15 tests
 ```
 
-MLflow UI (MLflow 3.17 no longer accepts a plain `./mlruns` folder as the tracking store, so runs
-are kept in `mlflow.db` with the model files in `mlruns/`):
+On macOS, XGBoost and LightGBM need OpenMP once: `brew install libomp`.
 
-```bash
-uv run mlflow ui --backend-store-uri sqlite:///mlflow.db --port 5000
-```
+### Where to look at the results
+
+| What | Start it | Open |
+|---|---|---|
+| MLflow: every run, parameters, metrics, models | `uv run mlflow ui --backend-store-uri sqlite:///mlflow.db --port 5003` | <http://127.0.0.1:5003>, experiment `yellow-taxi-duration` |
+| Optuna dashboard: both searches, trial history, parameter importance | `uv run optuna-dashboard sqlite:///optuna.db --port 8085` | <http://127.0.0.1:8085> |
+| Prediction API | `docker compose up -d --build` | <http://127.0.0.1:8004/docs> |
+
+MLflow 3.17 no longer accepts a plain `./mlruns` folder as the tracking store, so runs are kept
+in `mlflow.db` with the model files in `mlruns/`. In MLflow, expand `optuna-search` or
+`optuna-search-hgb` to see the 20 trials; select them and press **Compare** for a
+parallel-coordinates plot. In the Optuna dashboard, open `rf-search` or `hgb-search`.
 
 Run the API and send the sample request:
 
@@ -160,56 +169,93 @@ paste [`portainer-windows.yaml`](portainer-windows.yaml) into a new stack.
 | Path | What it does |
 |---|---|
 | `src/data.py` | Downloads a month of Yellow Taxi data; adds `duration` (minutes); keeps 1-60 min, 0-100 miles, pickups in that month |
+| `src/checks.py` | 9 data rules with failure counts; `assert_clean` stops training if cleaned data breaks one |
+| `src/baselines.py` | Route-speed rule (no ML): median minutes per mile of each route × distance |
 | `src/features.py` | The 5 features used by training and the API: pickup zone, dropoff zone, distance, pickup hour, weekday |
 | `src/train.py` | The assignment's `RandomForestRegressor`, logged to MLflow (params, RMSE, MAE, model) |
-| `src/compare.py` | More approaches: Ridge (one-hot zones), RandomForest, HistGradientBoosting; January and February 2025 |
+| `src/compare.py` | Six approaches (route speed, Ridge, RandomForest, HistGradientBoosting, XGBoost, LightGBM); January and February 2025 |
 | `src/tune.py` | Optuna (20 trials, nested MLflow runs) for the RandomForest or HistGradientBoosting |
 | `src/prepare_model.py` | Trains the served model if none exists (used by the Docker entrypoint) |
 | `src/model_io.py` | Saves and loads models with skops; only sklearn's two tree node types are trusted |
 | `app/` | FastAPI: `GET /health`, `POST /predict`, `POST /predict_batch`; model loaded once |
-| `notebooks/01-explore-and-compare.ipynb` | Data checks, cleaning rules, correlations, all MLflow comparisons |
-| `tests/` | 11 pytest tests: cleaning, features, model files, API |
+| `notebooks/01-explore-and-compare.ipynb` | First look at the data, correlations, all MLflow comparisons |
+| `notebooks/02-data-checks-and-processing.ipynb` | Raw file → rules → cleaning funnel → features → split → January vs February |
+| `notebooks/03-model-fit.ipynb` | Over/underfitting, learning curve, cross-validation, residuals, feature importance, February |
+| `tests/` | 15 pytest tests: data rules, cleaning, features, model files, API |
 
 ## Results
 
-January 2025: 3,475,226 trips, **3,339,084 after cleaning** (96.1%). 80/20 split with seed 42; every
-model trains on the same 500,000-row sample and is scored on the full January validation set
-(**667,817 trips**) and on all cleaned **February 2025** trips (**3,427,258**, a month no model saw).
+### How the data is checked and processed
 
-| Model | RMSE Jan | RMSE Feb | MAE Jan | Model size | Fit time |
+| Step | Trips | |
+|---|---|---|
+| Raw January 2025 file | 3,475,226 | 20 columns; 5 are used |
+| Keep duration 1-60 min | 3,403,248 | drops 38,060 under 1 min (incl. 2,051 with dropoff not after pickup) and 31,867 over 60 min |
+| Keep distance > 0 | 3,339,226 | drops 90,893 zero/negative distances (2.6%, the biggest problem) |
+| Keep distance ≤ 100 miles | 3,339,105 | drops 162 |
+| Keep pickups in January | **3,339,084** (96.1%) | drops 22 |
+
+No missing times or zones and no zones outside 1-265. After cleaning, all 9 rules in
+`src/checks.py` show 0 failures, and `assert_clean` stops training if that ever changes.
+Features are only what is known when a trip starts (pickup and dropoff zone, distance, pickup
+hour, weekday); fare and tip are recorded after the trip and would leak the answer. Split: 80/20
+with seed 42; validation **667,817** trips; out-of-time test: all **3,427,258** cleaned February 2025
+trips (median duration 12.17 vs 11.67 min in January: a small shift).
+
+### Model comparison
+
+Same features; comparisons train on the same 500,000-row sample.
+
+| Model | RMSE Jan | RMSE Feb | MAE Jan | Size | Fit |
 |---|---|---|---|---|---|
 | Predict the mean duration | 9.78 | 9.72 | | | |
-| Ridge, one-hot zones (reference) | 5.47 | 5.61 | 3.92 | 0.1 MB | 0.3 s |
-| `RandomForestRegressor` (100 trees, depth 20, min leaf 10): the assignment baseline | 4.10 | 4.27 | 2.76 | 291 MB | 9.5 s |
-| RandomForest tuned with Optuna | 4.03 | | 2.71 | 1,153 MB | 6.7 s |
-| **`HistGradientBoostingRegressor` (500 iterations, 127 leaves): served** | **3.78** | **3.96** | **2.53** | **8.6 MB** | 12 s |
+| Route speed rule (no ML) | 6.70 | 6.99 | 3.89 | 1.2 MB | 0.1 s |
+| Ridge, one-hot zones | 5.47 | 5.61 | 3.92 | 0.1 MB | 0.2 s |
+| `RandomForestRegressor`: the assignment baseline | 4.10 | 4.27 | 2.76 | 291 MB | 9 s |
+| RandomForest tuned with Optuna | 4.03 | | 2.71 | 1,153 MB | 7 s |
+| XGBoost | 3.79 | 3.97 | 2.55 | 7.6 MB | 5 s |
+| HistGradientBoosting | 3.78 | 3.96 | 2.53 | 8.6 MB | 12-20 s |
 | HistGradientBoosting tuned with Optuna | 3.77 | | 2.52 | | 19 s |
+| LightGBM | 3.77 | 3.95 | 2.52 | 5.6 MB | 15 s |
+| **HistGradientBoosting on all 2.67M rows: served** | **3.70** | **3.88** | **2.48** | **9.0 MB** | 24 s |
+| LightGBM on all 2.67M rows | 3.69 | 3.88 | 2.48 | | 17 s |
 
 Optuna searches (20 trials each on 200,000 rows): RandomForest 4.136-4.333, HistGradientBoosting 3.866-4.015.
 
-**Which model is served?** HistGradientBoosting with default-style settings: it is 8% more
-accurate than the RandomForest baseline on January and February and **34 times smaller**
-(8.6 MB vs 291 MB; the container uses about 220 MB of memory).
+- **ML is worth it:** the boosting models are 44% better than the route-speed rule.
+- **Gradient boosting beats the forest** (8% lower RMSE) at 1/34 of the size.
+- **The three boosting libraries tie** (within 0.02 min). The API serves scikit-learn's
+  HistGradientBoosting: no extra system library in Docker and safe skops loading; LightGBM's
+  0.01 min is not worth those.
+- **Tuning was not worth it** for either model; **more data was**: all 2.67 million rows lower
+  the RMSE from 3.78 to 3.70.
 
-**Was tuning worth it?** No, for either model. The tuned RandomForest gains 1.7% for a 4× larger
-file; the tuned HistGradientBoosting gains 0.01 minutes for 1,000 iterations and longer training.
+### Is the model a good fit? (notebook 03)
 
-**Does it hold up over time?** Yes: every model loses only 0.14-0.18 minutes of RMSE on February,
-so the January model generalises to the next month.
+| Check | Result | Meaning |
+|---|---|---|
+| Train vs validation RMSE | linear 5.43 / 5.47; forest 3.62 / 4.10; boosting 3.53 / 3.78; **served 3.63 / 3.70** | linear underfits; the forest partly memorises (gap 0.48); the served model barely overfits (gap 0.07) |
+| Learning curve (25k → 500k rows) | validation 4.22 → 3.78 | still improving, hence training on all rows |
+| 5-fold cross-validation (200k rows) | 3.92 ± 0.03 | stable across splits |
+| Residuals (served model) | mean error +0.001 min; 56% within 2 min, 88% within 5 min | unbiased overall |
+| Error by trip length | MAE 1.5 min for trips under 10 min, 8.8 min for 45-60 min trips (underpredicted by about 8 min) | long trips in traffic are the weak spot |
+| Airport trips | MAE 4.1 vs 2.4 min for other trips | same cause: long, traffic-dependent |
+| Permutation importance | distance 10.1, pickup hour 1.4, zones 0.8 each, weekday 0.5 (RMSE increase) | distance dominates; time of day matters |
+| February 2025 | RMSE 3.88 (January 3.70) | holds up on the next month |
 
-API check (Docker, HistGradientBoosting): `sample-request.json` (zone 161 → 236, 2.5 miles,
-Wednesday 08:30) → **19.63 minutes** in 0.02 s. The same trip at 03:00 → 12.65 min and at 17:30 →
-17.61 min; JFK (132) → Times Square (230), 17 miles at 17:30 → 50.42 min. Invalid input (zone 999,
-distance 0, missing time) → HTTP 422.
+API check (Docker, served model): `sample-request.json` (zone 161 → 236, 2.5 miles, Wednesday
+08:30) → **19.39 minutes**. The same trip at 03:00 → 12.35 min and at 17:30 → 17.58 min;
+JFK (132) → Times Square (230), 17 miles at 17:30 → 50.6 min. Invalid input (zone 999, distance 0,
+missing time) → HTTP 422. The container uses about 240 MB of memory.
 
 ### Answers
 
-1. **What is the RMSE of your final model?** **3.78 minutes** on 667,817 January validation trips
-   (MAE 2.53) and 3.96 on February 2025, for the served HistGradientBoosting model. The assignment's
-   RandomForest baseline reaches 4.10.
+1. **What is the RMSE of your final model?** **3.70 minutes** on 667,817 January validation trips
+   (MAE 2.48) and 3.88 on February 2025, for the served HistGradientBoosting model trained on all
+   2.67 million training rows. The assignment's RandomForest baseline reaches 4.10.
 2. **What would you do differently with more time?**
-   - Add features for the remaining error: route-level average speed by hour, airport flags,
-     weather and traffic for the day.
+   - Add features for the long trips it underpredicts: route-level average speed by hour, airport
+     flags, weather and traffic for the day.
    - Train on several months and validate on the next one, with a monthly drift check.
    - Load the model from the MLflow Model Registry by alias instead of a file (CI already runs
      the tests and checks the Docker image on every push).

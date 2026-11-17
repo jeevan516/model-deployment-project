@@ -1,8 +1,8 @@
 """Train the served model (HistGradientBoosting) if MODEL_PATH does not exist yet.
 
 Used by the Docker entrypoint so a fresh container works without a pre-trained file:
-it downloads January 2025, trains on the same 500,000-row sample as src/compare.py and
-saves the model plus metadata. MLflow is not needed here.
+it downloads January 2025, trains on all 2.67 million training rows (TRAIN_SIZE to change)
+and saves the model plus metadata. MLflow is not needed here.
 
     uv run python -m src.prepare_model
 """
@@ -24,12 +24,12 @@ def main() -> None:
     if path.exists():
         print(f"model already at {path}")
         return
-    print("no model yet: downloading January 2025 and training HistGradientBoosting (about a minute)")
-    X_train, X_val, y_train, y_val, _ = load_split(500_000)
+    print("no model yet: downloading January 2025 and training HistGradientBoosting on all rows (1-2 minutes)")
+    X_train, X_val, y_train, y_val, _ = load_split(int(os.getenv("TRAIN_SIZE", "0")) or None)
     model = make_model("hgb").fit(X_train, y_train)
     pred = model.predict(X_val)
     rmse, mae = float(root_mean_squared_error(y_val, pred)), float(mean_absolute_error(y_val, pred))
-    model_io.save(model, path, metadata={"run_id": None, "run_name": "hgb-container", "rmse": rmse,
+    model_io.save(model, path, metadata={"run_id": None, "run_name": "hgb-container", "train_rows": len(X_train), "rmse": rmse,
                                          "mae": mae, "features": features.FEATURES})
     print(f"saved {path}: validation RMSE {rmse:.3f}, MAE {mae:.3f}")
 
