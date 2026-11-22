@@ -12,6 +12,8 @@ RUN uv sync --locked --no-dev --no-install-project --no-cache
 COPY src ./src
 COPY app ./app
 COPY docker-entrypoint.sh ./
+# Strip Windows line endings in case the repo was cloned with core.autocrlf=true.
+RUN sed -i 's/\r$//' docker-entrypoint.sh && chmod +x docker-entrypoint.sh
 ENV MODEL_PATH=/app/artifacts/model.skops
 EXPOSE 8000
 CMD ["./docker-entrypoint.sh"]
