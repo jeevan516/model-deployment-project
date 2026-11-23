@@ -1,6 +1,6 @@
 # Model Deployment Project: project notes
 
-_Last updated: 17 Nov 2026_
+_Last updated: 22 Nov 2026_
 
 ## Project
 **Model Deployment Project.** Predict how long a NYC yellow-taxi trip will take, track the
@@ -116,3 +116,4 @@ traffic features for long trips, multi-month training with drift checks, registr
 - 17 Nov 2026: data checks (`src/checks.py`, 9 rules, training gate); XGBoost, LightGBM and a route-speed baseline; Optuna studies stored for optuna-dashboard; notebooks 02 (data) and 03 (fit); served model retrained on all rows (RMSE 3.70); 15 tests; deck updated.
 - 17 Nov 2026: long-trip experiment (route features, live traffic, weather): February RMSE 3.88 → 3.81, January gain inflated by the random split; 4 new tests (19); deck redesigned (13 slides, native charts) with the experiment and an updated "more time" slide.
 - 17 Nov 2026: implemented the "more time" answers: time-based validation, multi-month training with drift check, 80% prediction ranges in the API, MLflow registry serving, daily monitoring; 25 tests; deck updated to 17 slides.
+- 22 Nov 2026: Docker image safe to build on Windows: `.gitattributes` keeps `*.sh` LF and the Dockerfile strips CR from `docker-entrypoint.sh` (checked by building from a CRLF copy: 0 CR left, script parses). No change to model or results.
