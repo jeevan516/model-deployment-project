@@ -16,7 +16,11 @@ services:
     image: model-deployment-project-api:latest
     pull_policy: never          # the image is built locally in step 1, not pulled
     ports:
-      - "8004:8000"
+      - "127.0.0.1:8004:8000"
+    environment:
+      # First start trains on this many rows. All 2.67 million need more memory than Docker
+      # has next to the other stacks (the training was OOM-killed); 0 = all rows.
+      TRAIN_SIZE: ${TRAIN_SIZE:-500000}
     volumes:
       - model-data:/app/artifacts
     healthcheck:
